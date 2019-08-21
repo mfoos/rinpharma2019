@@ -1,0 +1,105 @@
+---
+title: 'Benchmark: Read File in'
+author: "Marianna Foos"
+date: "7/3/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(microbenchmark)
+library(reticulate)
+library(data.table)
+library(vroom)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+```
+
+This file comes from the GTEx project of the Broad Institute. The file is 14G unzipped, and breaks my laptop R install immediately. I've truncated it to 20M rows, or 1.6G to save myself some frustration.
+
+##### Base R
+```{r base, cache=TRUE}
+base_bench <- microbenchmark(base_tab <-read.delim("Brain_Amygdala.truncated.txt", sep = "\t"),
+               times = 5,
+               unit = "s",
+               setup = NULL)
+print(base_bench)
+rm(base_tab)
+```
+
+##### readr
+```{r readr, cache=TRUE}
+readr_bench <- microbenchmark(readr_tab <- read_delim("Brain_Amygdala.truncated.txt", delim = "\t"),
+               times = 5,
+               unit = "s",
+               setup = NULL)
+print(readr_bench)
+rm(readr_tab)
+```
+
+##### data.table
+```{r datatable, cache=TRUE}
+data.table_bench <- microbenchmark(data.table_tab <- fread("Brain_Amygdala.truncated.txt", sep = "\t"),
+               times = 5,
+               unit = "s",
+               setup = NULL)
+print(data.table_bench)
+rm(data.table_tab)
+```
+
+##### vroom
+```{r vroom, cache=TRUE}
+vroom_bench <- microbenchmark(vroom_tab <- vroom("Brain_Amygdala.truncated.txt", delim = "\t"),
+                              times = 5,
+                              unit = "s",
+                              setup = NULL)
+print(vroom_bench)
+rm(vroom_tab)
+```
+
+
+##### Reticulate
+```{r reticulate, cache=TRUE}
+use_python("/anaconda3/bin/python")
+
+reticulate_bench <- microbenchmark(reticulate_tab <- pd$read_table(filepath_or_buffer = "Brain_Amygdala.truncated.txt", sep = "\t"),
+               times = 5,
+               unit = "s",
+               setup = pd <- import("pandas"))
+print(reticulate_bench)
+rm(reticulate_tab)
+```
+
+##### Python Pandas
+```{python, engine.path = "/anaconda3/bin/python"}
+import timeit
+
+pandas_bench = timeit.timeit('pandas_tab = pandas.read_table("Brain_Amygdala.truncated.txt", "\t")', number=5, setup='import pandas')
+print(pandas_bench)
+```
+
+```{r}
+dividend = 1000000000
+times <- data.table("base" = mean(base_bench$time)/dividend,
+           "readr" = mean(readr_bench$time)/dividend,
+           "data.table" = mean(data.table_bench$time)/dividend,
+           "vroom" = mean(vroom_bench$time)/dividend,
+           "reticulate_pandas" = mean(reticulate_bench$time)/dividend,
+           "python_pandas" = py$pandas_bench/5,
+           stringsAsFactors = F)
+times <- times %>% 
+ gather(method, time_seconds, everything())
+```
+
+```{r}
+ggplot(times, aes(x = fct_reorder(method, time_seconds, .desc = TRUE), y = time_seconds)) +
+  geom_col() + 
+  xlab("method") +
+  theme(axis.text = element_text(size = 18, angle = 45, hjust = 1), axis.title = element_text(size = 16, face = "italic"))
+```
+
+```{r}
+sessionInfo()
+```

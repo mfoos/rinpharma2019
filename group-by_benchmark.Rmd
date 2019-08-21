@@ -1,0 +1,83 @@
+---
+title: 'Benchmark: Group-by'
+author: "Marianna Foos"
+date: "8/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(microbenchmark)
+library(reticulate)
+library(data.table)
+library(vroom)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+library(scales)
+```
+
+This file comes from the GTEx project of the Broad Institute. The file is 14G unzipped, and breaks my laptop R install immediately. I've truncated it to 20M rows, or 1.6G to save myself some frustration.
+
+##### readr
+```{r readr, cache=TRUE}
+readr_tab <- read_delim("Brain_Amygdala.truncated.txt", delim = "\t")
+readr_bench <- microbenchmark(readr_tab2 <- readr_tab %>%
+                                group_by(gene_id) %>%
+                                summarise(mean(tss_distance), sum(maf)),
+               times = 5,
+               unit = "s",
+               setup = NULL)
+
+print(readr_bench)
+rm(readr_tab, readr_tab2)
+```
+
+##### data.table
+```{r datatable, cache=TRUE}
+data.table_tab <- fread("Brain_Amygdala.truncated.txt", sep = "\t")
+data.table_bench <- microbenchmark(data.table_tab2 <- data.table_tab[, .(v1 = mean(tss_distance), v2 = sum(maf)), by = gene_id],
+               times = 5,
+               unit = "s",
+               setup = NULL)
+print(data.table_bench)
+rm(data.table_tab, data.table_tab2)
+```
+
+##### vroom
+```{r vroom, cache=TRUE}
+vroom_tab <- vroom("Brain_Amygdala.truncated.txt", delim = "\t")
+vroom_bench <- microbenchmark(vroom_tab2 <- vroom_tab %>%
+                                group_by(gene_id) %>%
+                                summarise(mean(tss_distance), sum(maf)),
+               times = 5,
+               unit = "s",
+               setup = NULL)
+
+print(vroom_bench)
+rm(vroom_tab, vroom_tab2)
+```
+
+
+```{r}
+dividend = 1000000000
+times <- data.table("readr plus dplyr" = mean(readr_bench$time)/dividend,
+           "data.table" = mean(data.table_bench$time)/dividend,
+           "vroom plus dplyr" = mean(vroom_bench$time)/dividend,
+           stringsAsFactors = F)
+times <- times %>% 
+  gather(method, time_seconds, everything())
+```
+
+```{r}
+ggplot(times, aes(x = fct_reorder(method, time_seconds, .desc = TRUE), y = time_seconds)) +
+  geom_col() +
+  coord_flip() +
+  xlab("method") +
+  theme(axis.text = element_text(size = 18), axis.title = element_text(size = 16, face = "italic"))
+```
+
+```{r}
+sessionInfo()
+```
